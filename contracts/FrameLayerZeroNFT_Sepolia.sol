@@ -20,8 +20,13 @@ contract FrameLayerZeroNFT_Sepolia is Ownable, ERC721, NonblockingLzApp {
         NEITHER
     }
 
+    // token exists
     mapping(uint256 => bool) public exists;
+
+    // user has minted
     mapping(address => bool) public minted;
+
+    // user has initiated bridge
     mapping(address => bool) public bridged;
 
     uint256 public currentTokenId;
@@ -41,13 +46,16 @@ contract FrameLayerZeroNFT_Sepolia is Ownable, ERC721, NonblockingLzApp {
         _tokenURI = _uri;
     }
 
-    function mint() external {
+    function mint() external returns (uint256) {
         if (minted[msg.sender]) revert AlreadyMinted();
 
         exists[currentTokenId] = true;
         minted[msg.sender] = true;
 
-        _mint(msg.sender, currentTokenId++);
+        _mint(msg.sender, currentTokenId);
+
+        // will return then increment
+        return currentTokenId++;
     }
 
     function bridgeToFrame(uint256 tokenId) public payable {
