@@ -9,48 +9,51 @@ import "./NonblockingLzApp.sol";
 
 error NotTokenOwner();
 error InsufficientGas();
-error SupplyExceeded();
+error AlreadyMinted();
+error TokenDoesNotExist();
+error OneWayBridge();
 
-contract CrossChainNFT is Ownable, ERC721, NonblockingLzApp {
-    uint256 public counter;
+contract FrameLayerZeroNFT_Sepolia is Ownable, ERC721, NonblockingLzApp {
+    enum STATUS {
+        MINTED,
+        BRIDGED,
+        NEITHER
+    }
+
+    mapping(uint256 => bool) public exists;
+    mapping(address => bool) public minted;
+    mapping(address => bool) public bridged;
+
     uint256 public currentTokenId;
-    uint256 public immutable MAX_ID;
 
-    event ReceivedNFT(
-        uint16 _srcChainId,
-        address _from,
-        uint256 _tokenId,
-        uint256 counter
-    );
+    string private _tokenURI;
+
+    uint16 public constant FRAME_CHAIN_ID = 10222;
 
     constructor(
         address _endpoint,
-        uint256 _startTokenId
+        string memory _uri
     )
-        ERC721("Frame CrossChain NFT", "FCCNFT")
+        ERC721("Frame LayerZero Testnet NFT", "FLZTNFT")
         NonblockingLzApp(_endpoint)
         Ownable(msg.sender)
     {
-        currentTokenId = _startTokenId;
-        MAX_ID = currentTokenId + 99999;
+        _tokenURI = _uri;
     }
 
     function mint() external {
-        if (currentTokenId == MAX_ID) revert SupplyExceeded();
-        _mint(msg.sender, currentTokenId);
-        unchecked {
-            ++currentTokenId;
-            ++counter;
-        }
+        if (minted[msg.sender]) revert AlreadyMinted();
+
+        exists[currentTokenId] = true;
+        minted[msg.sender] = true;
+
+        _mint(msg.sender, currentTokenId++);
     }
 
-    function crossChain(uint16 dstChainId, uint256 tokenId) public payable {
+    function bridgeToFrame(uint256 tokenId) public payable {
         if (msg.sender != ownerOf(tokenId)) revert NotTokenOwner();
 
-        // Remove NFT on current chain
-        unchecked {
-            --counter;
-        }
+        exists[tokenId] = false;
         _burn(tokenId);
 
         bytes memory payload = abi.encode(msg.sender, tokenId);
@@ -59,7 +62,7 @@ contract CrossChainNFT is Ownable, ERC721, NonblockingLzApp {
         bytes memory adapterParams = abi.encodePacked(version, gasForLzReceive);
 
         (uint256 messageFee, ) = lzEndpoint.estimateFees(
-            dstChainId,
+            FRAME_CHAIN_ID,
             address(this),
             payload,
             false,
@@ -67,8 +70,11 @@ contract CrossChainNFT is Ownable, ERC721, NonblockingLzApp {
         );
         if (msg.value <= messageFee) revert InsufficientGas();
 
+        // bridged
+        bridged[msg.sender] = true;
+
         _lzSend(
-            dstChainId,
+            FRAME_CHAIN_ID,
             payload,
             payable(msg.sender),
             address(0x0),
@@ -83,36 +89,39 @@ contract CrossChainNFT is Ownable, ERC721, NonblockingLzApp {
         uint64 /*_nonce*/,
         bytes memory _payload
     ) internal override {
-        address from;
-        assembly {
-            from := mload(add(_srcAddress, 20))
-        }
-        (address toAddress, uint256 tokenId) = abi.decode(
-            _payload,
-            (address, uint256)
-        );
-
-        _mint(toAddress, tokenId);
-        unchecked {
-            ++counter;
-        }
-        emit ReceivedNFT(_srcChainId, from, tokenId, counter);
+        revert OneWayBridge();
     }
 
     // Endpoint.sol estimateFees() returns the fees for the message
-    function estimateFees(uint16 dstChainId) external view returns (uint256) {
+    function estimateFees() external view returns (uint256) {
         bytes memory payload = abi.encode(msg.sender, 1); // Use arbitrary token id
         uint16 version = 1;
         uint256 gasForLzReceive = 350000;
         bytes memory adapterParams = abi.encodePacked(version, gasForLzReceive);
 
         (uint256 messageFee, ) = lzEndpoint.estimateFees(
-            dstChainId,
+            FRAME_CHAIN_ID,
             address(this),
             payload,
             false,
             adapterParams
         );
         return messageFee;
+    }
+
+    function tokenURI(
+        uint256 tokenId
+    ) public view override returns (string memory) {
+        if (!exists[tokenId]) revert TokenDoesNotExist();
+
+        return _tokenURI;
+    }
+
+    function status(address addr) external view returns (STATUS) {
+        if (bridged[addr]) return STATUS.BRIDGED;
+
+        if (minted[addr]) return STATUS.MINTED;
+
+        return STATUS.NEITHER;
     }
 }
