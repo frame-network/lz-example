@@ -4,24 +4,16 @@
 // You can also run a script with `npx hardhat run <script>`. If you do that, Hardhat
 // will compile your contracts, add the Hardhat Runtime Environment's members to the
 // global scope, and execute the script.
-const { ethers } = require('hardhat');
+const { ethers } = require("hardhat");
 
 async function main() {
-  const LZSepoliaEndpoint = '0xae92d5aD7583AD66E49A0c67BAd18F6ba52dDDc1';
+  const LZSepoliaEndpoint = "0xae92d5aD7583AD66E49A0c67BAd18F6ba52dDDc1";
   const sepoliaStartId = 0;
-  const CrossChainNFTFactory = await ethers.getContractFactory(
-    'CrossChainNFT'
-  );
-  const CrossChainNFT = await CrossChainNFTFactory.deploy(
-    LZSepoliaEndpoint,
-    sepoliaStartId
-  );
+  const CrossChainNFTFactory = await ethers.getContractFactory("FrameLayerZeroNFT_Sepolia");
+  const CrossChainNFT = await CrossChainNFTFactory.deploy(LZSepoliaEndpoint, "URL");
   await CrossChainNFT.waitForDeployment();
   const deploymentAddress = await CrossChainNFT.getAddress();
-  console.log(
-    'Sepolia testnet ----- CrossChainNFT deployed to:',
-    deploymentAddress
-  );
+  console.log("Sepolia testnet ----- CrossChainNFT deployed to:", deploymentAddress);
 }
 
 // We recommend this pattern to be able to use async/await everywhere
